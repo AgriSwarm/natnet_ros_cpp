@@ -13,6 +13,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <sensor_msgs/PointCloud.h>
+#include <nav_msgs/Odometry.h>
 
 #include "nn_filter.h"
 
@@ -29,6 +30,7 @@ public:
 
     //Initializing the publishers for the ros
     std::map<std::string, ros::Publisher> RigidbodyPub;
+    std::map<std::string, ros::Publisher> RigidbodyOdomPub;
     std::map<std::string, ros::Publisher> RigidbodyMarkerPub;
     std::map<std::string, ros::Publisher> IndividualMarkerPub;
     std::map<std::string, ros::Publisher> SkeletonPub; // WIP : Need Help

@@ -120,6 +120,7 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                 {
                     this->ListRigidBodies[pRB->ID] = body_name;
                     this->RigidbodyPub[pRB->szName] = n.advertise<geometry_msgs::PoseStamped>(body_name+"/pose", 50);
+                    this->RigidbodyOdomPub[pRB->szName] = n.advertise<nav_msgs::Odometry>(body_name+"/odom", 50);
                 }
                 if ( pRB->MarkerPositions != NULL && pRB->MarkerRequiredLabels != NULL )
                 {
@@ -268,6 +269,19 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     msgRigidBodyPose.pose.orientation.z = data.qz;
     msgRigidBodyPose.pose.orientation.w = data.qw;
     internal.RigidbodyPub[internal.ListRigidBodies[data.ID]].publish(msgRigidBodyPose);
+
+    // Creating a msg to put data related to the rigid body and
+    nav_msgs::Odometry msgRigidBodyOdom;
+    msgRigidBodyOdom.header.frame_id = internal.rosparam.globalFrame;
+    msgRigidBodyOdom.header.stamp = ros::Time::now();
+    msgRigidBodyOdom.pose.pose.position.x = data.x;
+    msgRigidBodyOdom.pose.pose.position.y = data.y;
+    msgRigidBodyOdom.pose.pose.position.z = data.z;
+    msgRigidBodyOdom.pose.pose.orientation.x = data.qx;
+    msgRigidBodyOdom.pose.pose.orientation.y = data.qy;
+    msgRigidBodyOdom.pose.pose.orientation.z = data.qz;
+    msgRigidBodyOdom.pose.pose.orientation.w = data.qw;
+    internal.RigidbodyOdomPub[internal.ListRigidBodies[data.ID]].publish(msgRigidBodyOdom);
     
     // creating tf frame to visualize in the rviz
     static tf2_ros::TransformBroadcaster tfRigidBodies;
