@@ -116,6 +116,17 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                 
                 // Creating publisher for the rigid bodies if found any
                 std::string body_name(pRB->szName);
+
+                this->RigidbodyCustomName[body_name] = body_name;
+                if(n.hasParam(body_name))
+                {
+                    std::string custom_name;
+                    if(n.getParam(body_name + "/tf_name", custom_name))
+                    {
+                        this->RigidbodyCustomName[body_name] = custom_name;
+                    }
+                }
+
                 if(rosparam.pub_rigid_body)
                 {
                     this->ListRigidBodies[pRB->ID] = body_name;
@@ -288,7 +299,8 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     geometry_msgs::TransformStamped msgTFRigidBodies;
     msgTFRigidBodies.header.stamp = ros::Time::now();
     msgTFRigidBodies.header.frame_id = internal.rosparam.globalFrame;
-    msgTFRigidBodies.child_frame_id = internal.ListRigidBodies[data.ID];
+    // msgTFRigidBodies.child_frame_id = internal.ListRigidBodies[data.ID];
+    msgTFRigidBodies.child_frame_id = internal.RigidbodyCustomName[internal.ListRigidBodies[data.ID]];
     msgTFRigidBodies.transform.translation.x = data.x;
     msgTFRigidBodies.transform.translation.y = data.y;
     msgTFRigidBodies.transform.translation.z = data.z;

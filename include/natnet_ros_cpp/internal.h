@@ -20,7 +20,6 @@
 class Internal
 {
 public:
-    
     // Keeping count on the assets
     // NOTE: It will be only counted at the start. It is not advised to add rigid body after starting the node 
     std::map<int32_t,std::string> ListRigidBodies; 
@@ -31,6 +30,7 @@ public:
     //Initializing the publishers for the ros
     std::map<std::string, ros::Publisher> RigidbodyPub;
     std::map<std::string, ros::Publisher> RigidbodyOdomPub;
+    std::map<std::string, std::string> RigidbodyCustomName;
     std::map<std::string, ros::Publisher> RigidbodyMarkerPub;
     std::map<std::string, ros::Publisher> IndividualMarkerPub;
     std::map<std::string, ros::Publisher> SkeletonPub; // WIP : Need Help

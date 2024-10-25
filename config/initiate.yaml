@@ -66,10 +66,12 @@ E: 0.04
 object_names:
   - cf1
 cf1:
-    marker_config: 0
-    pose:
-      orientation: []
-      position:
-      - -0.24554595351219177
-      - -1.3885701894760132
-      - 0.048130884766578674
+  marker_config: 0
+  pose:
+    orientation: []
+    position:
+    - -0.24554595351219177
+    - -1.3885701894760132
+    - 0.048130884766578674
+RigidBody1:
+  name: cf1
