@@ -2,15 +2,24 @@
 #include "internal.h"
 #include "ros/ros.h"
 
-Internal internal;
+// Internal internal;
 
 //Function to make callback to the datahandler when recieve the new frame.
+// void FrameCallback(sFrameOfMocapData *data, void* pUserData)
+// {
+//     auto pClient = reinterpret_cast<Internal *>(pUserData);
+//     if (internal.rosparam.log_latencies)
+//         pClient->LatenciInfo(data, pUserData, internal);
+//     pClient->DataHandler(data, pUserData, internal);
+// }
+
 void FrameCallback(sFrameOfMocapData *data, void* pUserData)
 {
-    auto pClient = reinterpret_cast<Internal *>(pUserData);
+    auto& internal = Internal::getInstance();
+    auto pClient = reinterpret_cast<NatNetClient*>(pUserData);
     if (internal.rosparam.log_latencies)
-        pClient->LatenciInfo(data, pUserData, internal);
-    pClient->DataHandler(data, pUserData, internal);
+        internal.LatenciInfo(data, pClient, internal);
+    internal.DataHandler(data, pClient, internal);
 }
 
 int main( int argc, char **argv)
@@ -32,6 +41,7 @@ int main( int argc, char **argv)
     ROS_INFO("NatNet Sample Client (NatNet ver. %d.%d.%d.%d)", ver[0], ver[1], ver[2], ver[3]);
     
     // You must init before using the object to get required parameters from the rosparam server
+    auto& internal = Internal::getInstance();
     internal.Init(n);
 
     if (internal.rosparam.serverType == "unicast")
@@ -58,6 +68,22 @@ int main( int argc, char **argv)
         ROS_INFO("Client initialized and ready.");
     }
 
+    // // Assembling the info from the optitrack, counting number of bodies etc..
+    // // Must extract the info before starting to publish the data.
+    // internal.Info(g_pClient, n);
+
+    // ROS_INFO("Client is connected to server and listening for data...");
+
+    // // Install natnet logging callback for some internal details
+    // internal.rosparam.log_internals ? NatNet_SetLogCallback( internal.MessageHandler ): internal.Pass();
+
+    // while(ros::ok())
+    // {   // set the frame callback handler
+    //     g_pClient->SetFrameReceivedCallback( FrameCallback, g_pClient);  // this function will receive data from the server
+    // }
+
+    // return ErrorCode_OK;
+
     // Assembling the info from the optitrack, counting number of bodies etc..
     // Must extract the info before starting to publish the data.
     internal.Info(g_pClient, n);
@@ -67,10 +93,19 @@ int main( int argc, char **argv)
     // Install natnet logging callback for some internal details
     internal.rosparam.log_internals ? NatNet_SetLogCallback( internal.MessageHandler ): internal.Pass();
 
+    // コールバックを1回だけ設定
+    g_pClient->SetFrameReceivedCallback(FrameCallback, g_pClient);
+
+    // ROSのメインループ
     while(ros::ok())
-    {   // set the frame callback handler
-        g_pClient->SetFrameReceivedCallback( FrameCallback, g_pClient);  // this function will receive data from the server
+    {   
+        ros::spinOnce();  // ROSのコールバックを処理
+        ros::Duration(0.001).sleep();  // CPUの負荷を下げるために少し待機
     }
+
+    // クリーンアップ
+    g_pClient->Disconnect();
+    delete g_pClient;
 
     return ErrorCode_OK;
 }

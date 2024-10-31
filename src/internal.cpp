@@ -3,6 +3,22 @@
 void Internal::Init(ros::NodeHandle &n)
 {
     this->rosparam.getNset(n);
+
+    // Get delay parameter
+    n.param("delay_ms", delay_ms_, 0.0);
+    // Print
+    ROS_INFO("Delay: %f ms", delay_ms_);
+    
+    // Setup timer for publishing delayed messages
+    publish_timer_ = n.createTimer(ros::Duration(0.001), // 1ms
+        [this](const ros::TimerEvent&) {
+            ros::Time now = ros::Time::now();
+            while (!message_queue_.empty() && 
+                   message_queue_.top().publish_time <= now) {
+                message_queue_.top().publish_func();
+                message_queue_.pop();
+            }
+        });
 }
 
 int Internal::ConnectClient(NatNetClient* g_pClient, sNatNetClientConnectParams &g_connectParams)
@@ -132,6 +148,8 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                     this->ListRigidBodies[pRB->ID] = body_name;
                     this->RigidbodyPub[pRB->szName] = n.advertise<geometry_msgs::PoseStamped>(body_name+"/pose", 50);
                     this->RigidbodyOdomPub[pRB->szName] = n.advertise<nav_msgs::Odometry>(body_name+"/odom", 50);
+                    this->RigidbodyDelayedPub[pRB->szName] = n.advertise<geometry_msgs::PoseStamped>(body_name+"/pose_delayed", 50);
+                    this->RigidbodyOdomDelayedPub[pRB->szName] = n.advertise<nav_msgs::Odometry>(body_name+"/odom_delayed", 50);
                 }
                 if ( pRB->MarkerPositions != NULL && pRB->MarkerRequiredLabels != NULL )
                 {
@@ -268,10 +286,13 @@ void Internal::DataHandler(sFrameOfMocapData* data, void* pUserData, Internal &i
 
 void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
 {
+    ros::Time now = ros::Time::now();
+    ros::Time publish_time = now + ros::Duration(delay_ms_ / 1000.0);
+
     // Creating a msg to put data related to the rigid body and 
-    geometry_msgs::PoseStamped msgRigidBodyPose;
+    geometry_msgs::PoseStamped msgRigidBodyPose, msgRigidBodyPoseDelayed;
     msgRigidBodyPose.header.frame_id = internal.rosparam.globalFrame;
-    msgRigidBodyPose.header.stamp = ros::Time::now();
+    msgRigidBodyPose.header.stamp = now;
     msgRigidBodyPose.pose.position.x = data.x;
     msgRigidBodyPose.pose.position.y = data.y;
     msgRigidBodyPose.pose.position.z = data.z;
@@ -279,12 +300,15 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     msgRigidBodyPose.pose.orientation.y = data.qy;
     msgRigidBodyPose.pose.orientation.z = data.qz;
     msgRigidBodyPose.pose.orientation.w = data.qw;
+    msgRigidBodyPoseDelayed = msgRigidBodyPose;
+    msgRigidBodyPoseDelayed.header.stamp = publish_time;
     internal.RigidbodyPub[internal.ListRigidBodies[data.ID]].publish(msgRigidBodyPose);
 
+
     // Creating a msg to put data related to the rigid body and
-    nav_msgs::Odometry msgRigidBodyOdom;
+    nav_msgs::Odometry msgRigidBodyOdom, msgRigidBodyOdomDelayed;
     msgRigidBodyOdom.header.frame_id = internal.rosparam.globalFrame;
-    msgRigidBodyOdom.header.stamp = ros::Time::now();
+    msgRigidBodyOdom.header.stamp = now;
     msgRigidBodyOdom.pose.pose.position.x = data.x;
     msgRigidBodyOdom.pose.pose.position.y = data.y;
     msgRigidBodyOdom.pose.pose.position.z = data.z;
@@ -292,12 +316,14 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     msgRigidBodyOdom.pose.pose.orientation.y = data.qy;
     msgRigidBodyOdom.pose.pose.orientation.z = data.qz;
     msgRigidBodyOdom.pose.pose.orientation.w = data.qw;
+    msgRigidBodyOdomDelayed = msgRigidBodyOdom;
+    msgRigidBodyOdomDelayed.header.stamp = publish_time;
     internal.RigidbodyOdomPub[internal.ListRigidBodies[data.ID]].publish(msgRigidBodyOdom);
     
     // creating tf frame to visualize in the rviz
     static tf2_ros::TransformBroadcaster tfRigidBodies;
-    geometry_msgs::TransformStamped msgTFRigidBodies;
-    msgTFRigidBodies.header.stamp = ros::Time::now();
+    geometry_msgs::TransformStamped msgTFRigidBodies, msgTFRigidBodiesDelayed;
+    msgTFRigidBodies.header.stamp = now;
     msgTFRigidBodies.header.frame_id = internal.rosparam.globalFrame;
     // msgTFRigidBodies.child_frame_id = internal.ListRigidBodies[data.ID];
     msgTFRigidBodies.child_frame_id = internal.RigidbodyCustomName[internal.ListRigidBodies[data.ID]];
@@ -308,8 +334,25 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     msgTFRigidBodies.transform.rotation.y = data.qy;
     msgTFRigidBodies.transform.rotation.z = data.qz;
     msgTFRigidBodies.transform.rotation.w = data.qw;
+    msgTFRigidBodiesDelayed = msgTFRigidBodies;
+    msgTFRigidBodiesDelayed.header.stamp = publish_time;
     tfRigidBodies.sendTransform(msgTFRigidBodies);
-    
+
+    // 遅延パブリッシュ用の情報を保存
+    std::string rigid_body_id = internal.ListRigidBodies[data.ID];
+
+    // 遅延パブリッシュ関数を作成
+    auto publish_func = [this, msgRigidBodyPoseDelayed, msgRigidBodyOdomDelayed, 
+                        msgTFRigidBodiesDelayed, rigid_body_id]() {
+        this->RigidbodyDelayedPub[rigid_body_id].publish(msgRigidBodyPoseDelayed);
+        this->RigidbodyOdomDelayedPub[rigid_body_id].publish(msgRigidBodyOdomDelayed);
+        
+        static tf2_ros::TransformBroadcaster tfRigidBodies;
+        tfRigidBodies.sendTransform(msgTFRigidBodiesDelayed);
+    };
+
+    // キューに追加
+    message_queue_.push(DelayedMessage(publish_time, publish_func));
 }
 
 void Internal::PubMarkerPose(sMarker &data, Internal &internal)

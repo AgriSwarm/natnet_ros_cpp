@@ -5,6 +5,7 @@
 #include <NatNetClient.h>
 
 #include <map>
+#include <queue>  // この行を追加
 
 #include <ros/publisher.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -17,9 +18,33 @@
 
 #include "nn_filter.h"
 
-class Internal
-{
+class Internal {
 public:
+    static Internal& getInstance() {
+        static Internal instance;
+        return instance;
+    }
+
+    // コピーコンストラクタとコピー代入演算子を削除
+    Internal(const Internal&) = delete;
+    Internal& operator=(const Internal&) = delete;
+
+private:
+    Internal() {} // プライベートコンストラクタ
+    
+public:
+    // DelayedMessage構造体の定義
+    struct DelayedMessage {
+        ros::Time publish_time;
+        std::function<void()> publish_func;
+        
+        DelayedMessage(ros::Time t, std::function<void()> f) 
+            : publish_time(t), publish_func(f) {}
+        
+        bool operator>(const DelayedMessage& other) const {
+            return publish_time > other.publish_time;
+        }
+    };
     // Keeping count on the assets
     // NOTE: It will be only counted at the start. It is not advised to add rigid body after starting the node 
     std::map<int32_t,std::string> ListRigidBodies; 
@@ -30,6 +55,8 @@ public:
     //Initializing the publishers for the ros
     std::map<std::string, ros::Publisher> RigidbodyPub;
     std::map<std::string, ros::Publisher> RigidbodyOdomPub;
+    std::map<std::string, ros::Publisher> RigidbodyDelayedPub;
+    std::map<std::string, ros::Publisher> RigidbodyOdomDelayedPub;
     std::map<std::string, std::string> RigidbodyCustomName;
     std::map<std::string, ros::Publisher> RigidbodyMarkerPub;
     std::map<std::string, ros::Publisher> IndividualMarkerPub;
@@ -75,6 +102,12 @@ public:
     // Publish Point cloud from the marker
     void PubPointCloud(sMarker &data, Internal &internal);
 
+private:
+    std::priority_queue<DelayedMessage, 
+                       std::vector<DelayedMessage>, 
+                       std::greater<DelayedMessage>> message_queue_;
+    double delay_ms_{0.0};
+    ros::Timer publish_timer_;
 };
 
 
